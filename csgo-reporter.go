@@ -27,7 +27,6 @@ var dmgs string
 
 
 func main() {
-  // path, file := config.Init()
   Config := config.Init()
 
   config.Clear()
