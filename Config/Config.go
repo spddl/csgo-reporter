@@ -15,9 +15,10 @@ type Config struct {
 	Path        string `json:"path"`
 	File        string `json:"file"`
 	Integration struct {
-		Enable int `json:"enable"`
-		C4     int `json:"c4"`
+		Enable bool `json:"enable"`
+		C4     bool `json:"c4"`
 	} `json:"integration"`
+	Help bool `json:"help"`
 }
 
 func Init() (Config) {
@@ -77,7 +78,6 @@ func Init() (Config) {
 }
 
 
-
 func Clear()  {
   // cmd := exec.Cmd // TODO https://stackoverflow.com/questions/24512112/how-to-print-struct-variables-in-console
   // if runtime.GOOS == "windows" {
@@ -117,8 +117,6 @@ func readCLI(txt string) string {
 
 func LoadConfigFile() (Config) {
 
-  fmt.Println("LoadConfigFile")
-
   file, e := ioutil.ReadFile("./config.json")
   if e != nil {
     fmt.Printf("File error: %v\n", e)
@@ -130,9 +128,6 @@ func LoadConfigFile() (Config) {
   if err != nil {
    fmt.Println("error:", err)
   }
-  // fmt.Println(jsontype)
-  // fmt.Println(jsontype.File)
-  // return jsontype.Path, jsontype.File
   return jsontype
 }
 
@@ -144,9 +139,10 @@ func SaveConfigFile(dir, file string) (Config) {
       "path": "`+strings.Replace(dir, "\\", "\\\\", -1)+`",
       "file": "`+file+`",
       "Integration": {
-        "enable": 1,
-        "c4": 1
-      }
+        "enable": true,
+        "c4": true
+      },
+      "help": true
     }
   `)
 
@@ -160,7 +156,6 @@ func SaveConfigFile(dir, file string) (Config) {
       fmt.Println("gespeichert.")
 
       var jsontype Config
-
       err := json.Unmarshal(jsonBlob, &jsontype)
       if err != nil {
         panic(err)

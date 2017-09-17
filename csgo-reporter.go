@@ -31,10 +31,12 @@ func main() {
   Config := config.Init()
 
   config.Clear()
-  fmt.Println("\x1b[36;1madd Steam Parameter: -condebug +bind \",\" report.cfg\x1b[0m")
+  if Config.Help {
+    fmt.Println("\x1b[36;1madd Steam Parameter: -condebug +bind \",\" report.cfg\x1b[0m")
+  }
 
-  if Config.Integration.Enable == 1 {
-    go GameStateIntegration.Start() // https://github.com/dank/go-csgsi
+  if Config.Integration.Enable {
+    go GameStateIntegration.Start(Config.Path) // https://github.com/dank/go-csgsi
   }
 
    	// Leeren der console.log
@@ -118,8 +120,6 @@ func main() {
       if err := cmd.Wait(); err != nil { log.Fatal(err) }
 }
 
-
-// var timer *time.Timer;
 var timerempty *time.Timer;
 
 func writefile(path,file,val string) {
@@ -151,16 +151,14 @@ func writefile(path,file,val string) {
 		})
 	}
 
-
-
 }
 
 func writedmg(val string) {
 	// Parse die HP
-    f := strings.Index(val, " - "); l := strings.LastIndex(val, " in "); hp, _ := strconv.Atoi(val[f+3:l])
+	f := strings.Index(val, " - "); l := strings.LastIndex(val, " in "); hp, _ := strconv.Atoi(val[f+3:l])
 
 	// TODO wenn 2 gegner über 100 hp verloren haben und es keinen anderen gibt sollte die Datei leeer sein
-    if hp <= 99 { // Nur wenn der Gegner noch nicht Tot ist
+	if hp <= 99 { // Nur wenn der Gegner noch nicht Tot ist
 		//log.Print("writedmg: ",val," (",hp,")")
 
 		if lastplayer != "" {
@@ -171,7 +169,7 @@ func writedmg(val string) {
 			dmgs = parsedmg(val)
 		}
 		lastplayer = val
-    }
+	}
 }
 
 

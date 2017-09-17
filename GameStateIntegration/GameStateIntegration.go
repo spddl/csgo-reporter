@@ -1,6 +1,8 @@
 package GameStateIntegration
 
 import (
+  "os"
+  "io/ioutil"
   "fmt"
   "time"
   "log"
@@ -11,7 +13,6 @@ import (
 var isPlanted bool = false
 var ctScore int = 0
 var tScore int = 0
-
 
 type Ticker interface {
 	Duration() time.Duration
@@ -33,8 +34,10 @@ func NewTicker(d time.Duration) Ticker {
 
 type TickFunc func(d time.Duration)
 
+func Start(csgoPath string) {
 
-func Start() {
+  check_gamestate_integration(csgoPath)
+
   game := csgsi.New(10)
 
 	go func() {
@@ -48,28 +51,41 @@ func Start() {
 				isPlanted = true
 			} else if isPlanted && state.Round != nil && (state.Round.Phase == "over" || state.Round.Phase == "freezetime") {
 
-        if state.Round.Bomb == "exploded" {
+				if state.Round.Bomb == "exploded" {
           log.Print("\x1b[31;1mbomb exploded\x1b[0m")
-        } else if state.Round.Bomb == "defused" {
+				} else if state.Round.Bomb == "defused" {
           log.Print("\x1b[36;1mbomb defused\x1b[0m")
-        }
+				}
 
 				isPlanted = false
 			}
 
-			if (state.Round != nil && (state.Round.Phase == "over" || state.Round.Phase == "freezetime")) {
-				if ctScore != state.Map.Team_ct.Score || tScore != state.Map.Team_t.Score {
+			if (state.Round != nil && state.Map != nil && (state.Round.Phase == "over" || state.Round.Phase == "freezetime")) {
+        if ctScore != state.Map.Team_ct.Score || tScore != state.Map.Team_t.Score {
           log.Print("--- \x1b[36;1m CT:",state.Map.Team_ct.Score,"\x1b[0m -\x1b[31;1m Ter:",state.Map.Team_t.Score,"\x1b[0m ---")
-					ctScore = state.Map.Team_ct.Score
-					tScore = state.Map.Team_t.Score
-				}
+          ctScore = state.Map.Team_ct.Score
+          tScore = state.Map.Team_t.Score
+        }
 			}
-
 
 		}
 	}()
-	game.Listen(":3000")
+	game.Listen(":1337")
 }
+
+
+
+func check_gamestate_integration(csgoPath string){
+  if _, err := os.Stat(csgoPath+"\\cfg\\gamestate_integration_spddl.cfg"); os.IsNotExist(err) {
+    data := []byte(`"csgo-reporter"{"uri" "http://127.0.0.1:1337" "timeout" "5.0" "buffer" "0.1" "throttle" "0.5" "heathbeat" "60.0" "data"{"map" "1" "round" "1"}}`)
+    err := ioutil.WriteFile(csgoPath+"\\cfg\\gamestate_integration_spddl.cfg", data, 0644)
+    if err != nil {
+      panic(err)
+    }
+  }
+}
+
+
 
 func countdown(ticker Ticker, duration time.Duration) chan time.Duration {
 	remainingCh := make(chan time.Duration, 1)
@@ -84,9 +100,11 @@ func countdown(ticker Ticker, duration time.Duration) chan time.Duration {
 	return remainingCh
 }
 
+
+
 // TODO "mp_c4timer" = "40" min. 10.000000 client notify replicated - how long from when the C4 is armed until it blows
 func c4timer() {
-  for d := range countdown(NewTicker(time.Second), 40*time.Second) {
+  for d := range countdown(NewTicker(time.Second), 39*time.Second) {
     if isPlanted {
       num := float64(d)/1000000000
       if math.Mod(num, 5) == 0 || num < 5 {
