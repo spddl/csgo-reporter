@@ -1,19 +1,22 @@
 package config
 
 import (
-  "encoding/json"
-  "strings"
-  "io/ioutil"
-  "os"
-  "os/exec"
-  "bufio"
-  "flag"
-  "fmt"
+	"bufio"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io/ioutil"
+	"os"
+	"os/exec"
+	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 type Config struct {
 	Path        string `json:"path"`
 	File        string `json:"file"`
+	APIKEY      string `json:"apikey"`
 	Integration struct {
 		Enable bool `json:"enable"`
 		C4     bool `json:"c4"`
@@ -21,123 +24,132 @@ type Config struct {
 	Help bool `json:"help"`
 }
 
-func Init() (Config) {
-  fmt.Println("config.init")
+func Init() Config {
+	fmt.Println("config.init")
 
-  var defaultPath string = "C:\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo"
-  var defaultFile string = "report.cfg"
+	var defaultPath string = "C:\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo"
+	var defaultFile string = "report.cfg"
 
-  path := flag.String("path", defaultPath, "CSGO Folder")
-  file := flag.String("file", defaultFile, "cfg File")
-  flag.Parse()
+	path := flag.String("path", defaultPath, "CSGO Folder")
+	file := flag.String("file", defaultFile, "cfg File")
+	flag.Parse()
 
-  if len(os.Args) < 2 { // keine Parameter
-    if _, err := os.Stat("./config.json"); os.IsNotExist(err) {
-      Clear()
+	if len(os.Args) < 2 { // keine Parameter
+		if _, err := os.Stat("./config.json"); os.IsNotExist(err) {
+			Clear()
 
-      for {
-        *path = readCLI("CSGO Path\ndefault: '"+defaultPath+"'\n")
-        if *path != "" {
+			k, err := registry.OpenKey(registry.CURRENT_USER, `SOFTWARE\\Valve\\Steam`, registry.READ)
+			if err != nil {
+				fmt.Println(err)
+			}
+			defer k.Close()
 
-          // val[len(val)-1] lösche den letzten \ falls vorhanden
-          // p := (*path)
-          // fmt.Println(p[len(p)-1])
+			s, _, err := k.GetStringValue("SteamPath")
+			if err == nil {
+				s = strings.Replace(s, "/", "\\", -1)
+				fmt.Println("\x1b[32;1mFound Steam Folder:\x1b[0m", s, "\n")
+				defaultPath = s + "\\SteamApps\\common\\Counter-Strike Global Offensive\\csgo"
+			}
 
-          ExistsFolder(*path)
-        } else {
-          ExistsFolder(defaultPath)
-          *path = defaultPath
-        }
+			for {
+				*path = readCLI("CSGO Path\ndefault: '" + defaultPath + "'\n")
+				if *path != "" {
 
-        b,_ := ExistsFolder(*path)
-        if b {
-          break
-        } else {
-          Clear()
-          fmt.Println("Ordner nicht gefunden\n")
-        }
+					// val[len(val)-1] lösche den letzten \ falls vorhanden
+					// p := (*path)
+					// fmt.Println(p[len(p)-1])
 
-      }
-      Clear()
-      *file = readCLI("Report File\ndefault: 'report.cfg'\n")
-      if *file == "" {
-        *file = "report.cfg"
-      }
+					ExistsFolder(*path)
+				} else {
+					ExistsFolder(defaultPath)
+					*path = defaultPath
+				}
 
-      return SaveConfigFile(*path, *file)
+				b, _ := ExistsFolder(*path)
+				if b {
+					break
+				} else {
+					Clear()
+					fmt.Println("Ordner nicht gefunden\n")
+				}
 
-    } else {
-      return LoadConfigFile()
-    }
+			}
+			Clear()
+			*file = readCLI("Report File\ndefault: 'report.cfg'\n")
+			if *file == "" {
+				*file = "report.cfg"
+			}
 
-  } else { // parameter gefunden
-    return ParseConfig(*path,*file)
-  }
+			return SaveConfigFile(*path, *file)
 
-  panic("Error")
+		} else {
+			return LoadConfigFile()
+		}
+
+	} else { // parameter gefunden
+		return ParseConfig(*path, *file)
+	}
+
+	panic("Error")
 }
 
-
-func Clear()  {
-  // cmd := exec.Cmd // TODO https://stackoverflow.com/questions/24512112/how-to-print-struct-variables-in-console
-  // if runtime.GOOS == "windows" {
-    cmd := exec.Command("cmd", "/c", "cls")
-  // } else {
-  //   cmd = exec.Command("cmd", "/c", "clear")
-  // }
-  cmd.Stdout = os.Stdout
-  cmd.Run()
+func Clear() {
+	// cmd := exec.Cmd // TODO https://stackoverflow.com/questions/24512112/how-to-print-struct-variables-in-console
+	// if runtime.GOOS == "windows" {
+	cmd := exec.Command("cmd", "/c", "cls")
+	// } else {
+	//   cmd = exec.Command("cmd", "/c", "clear")
+	// }
+	cmd.Stdout = os.Stdout
+	cmd.Run()
 }
-
-
 
 func ExistsFolder(path string) (bool, error) {
-  _, err := os.Stat(path)
-  if err == nil {return true, nil}
-  if os.IsNotExist(err) {return false, nil}
-  return true, err
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return true, err
 }
-
-
 
 func readCLI(txt string) string {
-  reader := bufio.NewReader(os.Stdin)
-  fmt.Print(txt)
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print(txt)
 
-  defaultPathbyte, _, e := reader.ReadLine()
-  defaultPath := fmt.Sprintf("%s", defaultPathbyte)
-  if e != nil {
-    fmt.Printf("error: %#v\n", e)
-    os.Exit(1)
-  }
-  return defaultPath
+	defaultPathbyte, _, e := reader.ReadLine()
+	defaultPath := fmt.Sprintf("%s", defaultPathbyte)
+	if e != nil {
+		fmt.Printf("error: %#v\n", e)
+		os.Exit(1)
+	}
+	return defaultPath
 }
 
+func LoadConfigFile() Config {
 
+	file, e := ioutil.ReadFile("./config.json")
+	if e != nil {
+		fmt.Printf("File error: %v\n", e)
+		os.Exit(1)
+	}
 
-func LoadConfigFile() (Config) {
-
-  file, e := ioutil.ReadFile("./config.json")
-  if e != nil {
-    fmt.Printf("File error: %v\n", e)
-    os.Exit(1)
-  }
-
-  var jsontype Config
-  err := json.Unmarshal(file, &jsontype)
-  if err != nil {
-   fmt.Println("error:", err)
-  }
-  return jsontype
+	var jsontype Config
+	err := json.Unmarshal(file, &jsontype)
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	return jsontype
 }
 
-
-
-func SaveConfigFile(dir, file string) (Config) {
-  var jsonBlob = json.RawMessage(`
+func SaveConfigFile(dir, file string) Config {
+	var jsonBlob = json.RawMessage(`
     {
-      "path": "`+strings.Replace(dir, "\\", "\\\\", -1)+`",
-      "file": "`+file+`",
+      "path": "` + strings.Replace(dir, "\\", "\\\\", -1) + `",
+      "file": "` + file + `",
+      "APIKEY": "#https://steamcommunity.com/dev/apikey#",
       "Integration": {
         "enable": true,
         "c4": true
@@ -146,47 +158,47 @@ func SaveConfigFile(dir, file string) (Config) {
     }
   `)
 
-  bytes, err := json.Marshal(jsonBlob)
-  if err != nil {
-    panic("Config konnte nicht gespeichert werden (json error)")
-  } else {
+	bytes, err := json.Marshal(jsonBlob)
+	if err != nil {
+		panic("Config konnte nicht gespeichert werden (json error)")
+	} else {
 
-    err = ioutil.WriteFile("./config.json", bytes, 0644)
-    if err == nil {
-      fmt.Println("gespeichert.")
+		err = ioutil.WriteFile("./config.json", bytes, 0644)
+		if err == nil {
+			fmt.Println("gespeichert.")
 
-      var jsontype Config
-      err := json.Unmarshal(jsonBlob, &jsontype)
-      if err != nil {
-        panic(err)
-      }
+			var jsontype Config
+			err := json.Unmarshal(jsonBlob, &jsontype)
+			if err != nil {
+				panic(err)
+			}
 
-      return jsontype
-    } else {
-      panic(err)
-    }
+			return jsontype
+		} else {
+			panic(err)
+		}
 
-  }
+	}
 }
 
-
-
-func ParseConfig(dir, file string) (Config) {
-  var jsonBlob = json.RawMessage(`
+func ParseConfig(dir, file string) Config {
+	var jsonBlob = json.RawMessage(`
     {
-      "path": "`+strings.Replace(dir, "\\", "\\\\", -1)+`",
-      "file": "`+file+`",
+      "path": "` + strings.Replace(dir, "\\", "\\\\", -1) + `",
+      "file": "` + file + `",
+      "APIKEY": "#https://steamcommunity.com/dev/apikey#",
       "Integration": {
-        "enable": 1,
-        "c4": 1
-      }
+        "enable": true,
+        "c4": true
+      },
+      "help": true
     }
   `)
 
-  var jsontype Config
-  err := json.Unmarshal(jsonBlob, &jsontype)
-  if err != nil {
-    panic(err)
-  }
-  return jsontype
+	var jsontype Config
+	err := json.Unmarshal(jsonBlob, &jsontype)
+	if err != nil {
+		panic(err)
+	}
+	return jsontype
 }

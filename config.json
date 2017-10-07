@@ -1,0 +1,10 @@
+{  
+   "path":"C:\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo",
+   "file":"report.cfg",
+   "APIKEY":"#https://steamcommunity.com/dev/apikey#",
+   "Integration":{  
+      "enable":true,
+      "c4":true
+   },
+   "help":true
+}
