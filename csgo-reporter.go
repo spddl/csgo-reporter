@@ -1,249 +1,191 @@
 package main
 
 import (
-	"fmt"
-	// "runtime"
 	"bufio"
+	"bytes"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
-	"os/exec"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"./Config"
-	"./GameStateIntegration"
 	"./SmurfChecker"
 
 	"github.com/tatsushid/go-fastping"
 )
 
-var path, file string
 var fileIsEmpty = true
-var dmgstatus = false
-var multiplayer = false
 var SmurfCheckerStatus = false
 
-var lastplayer string
-var dmgs string
-
-var Array []string
+var Playerlist []string
 
 func main() {
-	Config := config.Init()
+	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 
-	config.Clear()
+	dmg := new(dmgParser)
 
-	if Config.Help {
+	config := new(Config)
+	config.Init()
+
+	if config.Help {
 		fmt.Println("\x1b[36;1madd Steam Parameter: -condebug +bind \",\" report.cfg\x1b[0m")
 	}
 
-	if Config.Integration.Enable {
-		go GameStateIntegration.Start(Config.Path) // https://github.com/dank/go-csgsi
+	if config.Integration.Enable {
+		go GamestateIntegration(config) // https://github.com/dank/go-csgsi
 	}
 
 	// Leeren der console.log
-	err := ioutil.WriteFile(Config.Path+"\\console.log", []byte("\n"), 0644)
+	err := ioutil.WriteFile(path.Join(config.Path, "console.log"), []byte{10}, 0644)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 
-	writefile(Config.Path, Config.File, "")
-	//text := "Damage Taken from \"Loading\x83?\xdd \x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^\x83-^] 99? Ɵ\"\" - 52 in 2 hits"
-	//fmt.Println(strconv.Quote(line)) // Ascii
-	// https://msdn.microsoft.com/en-us/powershell/reference/5.1/microsoft.powershell.management/get-content
-	// TODO: bugfix für die Symbole
-	//cmd := exec.Command("powershell.exe", "Get-Content", "'"+path+"\\console.log'","-Wait","-Encoding Ascii")
-	//fmt.Println(strconv.Quote(line)) // Ascii
-	// cmd := exec.Command("powershell.exe", "Get-Content", "'"+path+"\\console.log'","-Wait","-Encoding UTF8")
-	cmd := exec.Command("powershell.exe", "Get-Content", "'"+Config.Path+"\\console.log'", "-Wait", "-Encoding Oem")
-	stdout, err := cmd.StdoutPipe()
+	// Leeren der report.cfg
+	WriteFile(config, []byte{})
+
+	t, err := newTailReader(path.Join(config.Path, "console.log"))
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-	}
-
-	scanner := bufio.NewScanner(stdout)
+	defer t.Close()
+	scanner := bufio.NewScanner(t)
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if strings.Contains(line, "Confirmed best official datacenter ping: ") { // errechnete Verzögung von Valve
-			log.Print("\x1b[36;1m", line, "\x1b[0m")
-		}
+		switch true {
+		case strings.Contains(line, "Confirmed best official datacenter ping: "): // errechnete Verzögung von Valve:
+			fmt.Printf("\x1b[36;1m%s\x1b[0m\n", line)
 
-		if strings.Index(line, "udp/ip  : ") == 0 {
-			l := strings.LastIndex(line, ":")
-			go ping(line[10:l])
-		}
-		if strings.Contains(line, "Connected to ") { // Pingt den Server beim verbinden an
-			f := strings.Index(line, "Connected to ")
-			l := strings.LastIndex(line, ":")
-			if f == 0 {
-				go ping(line[f+13 : l])
+		case strings.HasPrefix(line, "udp/ip  : "):
+			go ping(line[10:strings.LastIndex(line, ":")])
+		case strings.HasPrefix(line, "Connected to "):
+			if strings.Count(line, ":") == 1 { // zuviel ist igendeine ID und zuwenig könnte "loopback" sein
+				go ping(line[13:strings.LastIndex(line, ":")])
 			}
-		}
 
-		if line == "-------------------------" {
-			if dmgstatus {
-				dmgstatus = false
+		case line == "-------------------------":
+			if dmg.Enable {
+				dmg.Output(config)
+			}
+			dmg.Enable = !dmg.Enable
 
-				if multiplayer {
-					writefile(Config.Path, Config.File, dmgs)
-				} else {
-					if lastplayer != "" {
-						writefile(Config.Path, Config.File, lastplayer)
-					}
+		case dmg.Enable && strings.Contains(line, "Damage Given to ") && strings.Contains(line, " in ") && strings.Contains(line, " hit"):
+			fmt.Println("\x1b[32;1m", line, "\x1b[0m")
+			dmg.Add(line)
+
+		case !dmg.Enable && strings.Contains(line, "Damage Taken from ") && strings.Contains(line, " in ") && strings.Contains(line, " hit"):
+			fmt.Println("\x1b[31;1m", line, "\x1b[0m")
+
+		case strings.HasPrefix(line, `"mp_c4timer" = "`):
+			if config.Integration.Enable {
+				l := strings.Index(line[16:], `"`)
+				value := line[16 : l+16]
+				if strings.Contains(value, ".") { // der Timer ist in int und in csgo vermutlich ein float
+					value = value[:strings.Index(value, ".")]
 				}
-				multiplayer = false
-				lastplayer = ""
-				dmgs = ""
-
-			} else {
-				dmgstatus = true
-			}
-		}
-
-		if strings.Contains(line, "\"mp_c4timer\" = \"") { // Setzt den C4 Timer neu
-			f := strings.Index(line, "\"mp_c4timer\" = \"")
-			l := strings.Index(line[f+16:], "\"")
-			if Config.Integration.Enable {
-				i, err := strconv.Atoi(line[f+16 : l+16])
+				c4time, err := strconv.Atoi(value) // TODO string to int64 ?
 				if err != nil {
 					panic(err)
 				}
-				GameStateIntegration.C4time = i
+				C4time = int64(c4time)
 			}
-		}
 
-		if line == "SignalXWriteOpportunity(3)" { // New Round
-			fmt.Println(" ")
-			//go writedmg("")
-		}
+		case line == "SignalXWriteOpportunity(3)": // New Round
+			WriteFile(config, []byte{})
 
-		if dmgstatus {
-			if strings.Contains(line, "Damage Given to ") && strings.Contains(line, " in ") && strings.Contains(line, " hit") {
-				fmt.Println("\x1b[32;1m", line, "\x1b[0m")
-				go writedmg(line)
-			}
-		} else {
-			if strings.Contains(line, "Damage Taken from ") && strings.Contains(line, " in ") && strings.Contains(line, " hit") {
-				fmt.Println("\x1b[31;1m", line, "\x1b[0m")
-			}
-		}
-
-		if line == "#end" {
-			fmt.Print("\a")
-			SmurfCheckerStatus = false
-			go SmurfChecker.Start(Array, Config.APIKEY)
-		}
-		if SmurfCheckerStatus {
-			Array = append(Array, line)
-		}
-		if strings.Index(line, "# userid name uniqueid connected ping loss state rate") == 0 {
-			Array = []string{} // Array leeren
+		case strings.Index(line, "# userid name uniqueid connected ping loss state rate") == 0: // beginn from "status"
+			Playerlist = []string{} // Array leeren
 			SmurfCheckerStatus = true
+
+		case line == "#end":
+			SmurfCheckerStatus = false
+			go SmurfChecker.Start(Playerlist, config.APIKEY)
+
+		default:
+			if SmurfCheckerStatus { // add every player
+				Playerlist = append(Playerlist, line)
+			}
+			// log.Println("DEBUG: ", line)
 		}
-
-		// log.Printf("DEBUG: ",line)
 	}
-
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-	if err := cmd.Wait(); err != nil {
 		log.Fatal(err)
 	}
 }
 
 var timerempty *time.Timer
 
-func writefile(path, file, val string) {
-	if val == "" {
-		err := ioutil.WriteFile(path+"\\cfg\\"+file, []byte("echo byspddl"), 0644)
+var echoBySpddl = []byte{101, 99, 104, 111, 32, 98, 121, 115, 112, 100, 100, 108} // echo byspddl
+var say_team = []byte{115, 97, 121, 95, 116, 101, 97, 109, 32, 34}                // say_team "
+
+func WriteFile(c *Config, val []byte) {
+	var reportPath = path.Join(c.Path, "cfg", c.File)
+
+	if bytes.Equal(val, []byte{}) {
+		err := ioutil.WriteFile(reportPath, echoBySpddl, 0644)
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		fileIsEmpty = true
 	} else {
-
-		if timerempty != nil {
-			timerempty.Stop()
-		}
-
-		// log.Print("say_team: ",val)
-		err := ioutil.WriteFile(path+"\\cfg\\"+file, []byte("say_team "+val), 0644)
+		err := ioutil.WriteFile(reportPath, append(say_team, append(val, []byte{34}...)...), 0644)
 		if err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		fileIsEmpty = false
 
-		lastplayer = ""
-		dmgs = ""
-
 		if timerempty != nil {
 			timerempty.Stop()
 		}
-		timerempty = time.AfterFunc(30*time.Second, func() {
-			if fileIsEmpty != true {
-				err := ioutil.WriteFile(path+"\\cfg\\"+file, []byte("echo byspddl"), 0644)
+		timerempty = time.AfterFunc(2*time.Minute, func() {
+			if !fileIsEmpty {
+				err := ioutil.WriteFile(reportPath, echoBySpddl, 0644)
 				if err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}
 			fileIsEmpty = true
 		})
 	}
-
-}
-
-func writedmg(val string) {
-	// Parse die HP
-	f := strings.Index(val, " - ")
-	l := strings.LastIndex(val, " in ")
-	hp, _ := strconv.Atoi(val[f+3 : l])
-
-	// TODO wenn 2 gegner über 100 hp verloren haben und es keinen anderen gibt sollte die Datei leeer sein
-	if hp <= 99 { // Nur wenn der Gegner noch nicht Tot ist
-		//log.Print("writedmg: ",val," (",hp,")")
-
-		if lastplayer != "" {
-			dmgs = dmgs + " - " + parsedmg(val)
-			multiplayer = true
-		} else {
-			multiplayer = false
-			dmgs = parsedmg(val)
-		}
-		lastplayer = val
-	}
-}
-
-func parsedmg(line string) string {
-	_firstPlayer := strings.Index(line, "\"")
-	_lastPlayer := strings.LastIndex(line, "\"")
-	player := line[_firstPlayer+1 : _lastPlayer]
-
-	_firstDmg := strings.Index(line, " - ")
-	dmg := line[_firstDmg+3:]
-	return player + " " + dmg
 }
 
 func ping(ip string) {
 	p := fastping.NewPinger()
 	ra, err := net.ResolveIPAddr("ip4:icmp", ip)
 	if err != nil {
-		// fmt.Println(err)
+		log.Println(err)
 		return
 	}
 	p.AddIPAddr(ra)
 	p.OnRecv = func(addr *net.IPAddr, rtt time.Duration) {
 		fmt.Printf("\x1b[36;1mIP: %s, RTT: %v\x1b[0m\n", addr.String(), rtt) //  Round trip time https://de.wikipedia.org/wiki/Ping_(Daten%C3%BCbertragung)
 	}
-	// p.OnIdle = func() { fmt.Println(ip,"finish") }
 	err = p.Run()
 	if err != nil {
-		// fmt.Println(err)
+		fmt.Println(err)
 	}
 }
+
+// Powershell tail -f
+// cmd := exec.Command("powershell.exe", "Get-Content", "'"+config.Path+"\\console.log'", "-Wait", "-Encoding UTF8")
+// // cmd := exec.Command("powershell.exe", "Get-Content", "'"+Config.Path+"\\console.log'", "-Wait", "-Encoding Oem")
+// stdout, err := cmd.StdoutPipe()
+// if err != nil {
+// 	log.Fatal(err)
+// }
+// if err := cmd.Start(); err != nil {
+// 	log.Fatal(err)
+// }
+
+// scanner := bufio.NewScanner(stdout)
+// for scanner.Scan() {
+// 	line := scanner.Text()
+// }
+
+// if err := cmd.Wait(); err != nil {
+// 	log.Fatal(err)
+// }

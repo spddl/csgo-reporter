@@ -54,7 +54,7 @@ func getFriends(steamID64, APIKEY string) []Friends {
 		log.Fatal(jsonErr)
 	}
 
-	FriendsList := []Friends{}
+	FriendsList := make([]Friends, 0, len(GetFriendList1.Friendslist.Friends))
 	for _, e := range GetFriendList1.Friendslist.Friends {
 		FriendsList = append(FriendsList, Friends{e.Steamid, e.FriendSince})
 	}

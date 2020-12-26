@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -35,17 +34,17 @@ type GetPlayerSummaries struct {
 }
 
 type user struct {
-	steamID64    string
-	name         string
-	public       bool
-	profileUrl   string
-	timeCreated  string
-	accountAge   int64
-	FriendsList  []Friends
-	PlaytimeList Playtime
+	steamID64      string
+	name           string
+	public         bool
+	profileUrl     string
+	accountCreated string
+	accountAge     int64
+	FriendsList    []Friends
+	PlaytimeList   Playtime
 }
 
-func getPlayerSummaries(Array []string, APIKEY string) []user {
+func getPlayerSummaries(steamID64List []string, APIKEY string) []user {
 	// Takes a list of steamID64s and returns a list of User objects containing the following information
 	// username, steamid64, profileurl, isprofileprivate, and if the profile is not private it also adds the
 	// date the account was created in unix timestamp
@@ -57,7 +56,7 @@ func getPlayerSummaries(Array []string, APIKEY string) []user {
 	}
 
 	// create comma separated list of steamID64s
-	url := "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + APIKEY + "&steamIDS=" + strings.Join(Array[:], ",")
+	url := "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + APIKEY + "&steamIDS=" + strings.Join(steamID64List[:], ",")
 
 	client := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs
@@ -65,37 +64,58 @@ func getPlayerSummaries(Array []string, APIKEY string) []user {
 
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return []user{}
 	}
 
-	res, getErr := client.Do(req)
-	if getErr != nil {
-		log.Fatal(getErr)
+	res, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+		return []user{}
 	}
 
-	body, readErr := ioutil.ReadAll(res.Body)
-	if readErr != nil {
-		log.Fatal("read Err ", readErr)
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Println(err)
+		return []user{}
 	}
 
 	steamresp1 := GetPlayerSummaries{}
-	jsonErr := json.Unmarshal(body, &steamresp1)
-	if jsonErr != nil {
-		log.Fatal("json Err ", jsonErr)
+	err = json.Unmarshal(body, &steamresp1)
+	if err != nil {
+		log.Println(err)
+		return []user{}
 	}
 
-	returnUserList := []user{}
+	returnUserList := make([]user, 0, len(steamresp1.Response.Players))
 	for _, e := range steamresp1.Response.Players {
 		name := e.Personaname
 		steamID64 := e.Steamid
 		profileurl := e.Profileurl
 
 		if e.Communityvisibilitystate == 3 { // public profile
-			timeCreated := e.Timecreated
-
-			returnUserList = append(returnUserList, user{steamID64, name, true, profileurl, strconv.Itoa(timeCreated), (time.Now().Unix() - int64(timeCreated)) / (60 * 60 * 24 * 365), getFriends(steamID64, APIKEY), getPlaytimeStats(steamID64, APIKEY)})
+			tm := time.Unix(int64(e.Timecreated), 0)
+			returnUserList = append(returnUserList, user{
+				steamID64:      steamID64,
+				name:           name,
+				public:         true,
+				profileUrl:     profileurl,
+				accountCreated: tm.Format("02.01.2006"),
+				accountAge:     (time.Now().Unix() - int64(e.Timecreated)) / (60 * 60 * 24 * 365 /* One Year */),
+				FriendsList:    getFriends(steamID64, APIKEY),
+				PlaytimeList:   getPlaytimeStats(steamID64, APIKEY),
+			})
 		} else { // private profile
-			returnUserList = append(returnUserList, user{steamID64, name, false, profileurl, "", 0, []Friends{}, Playtime{}}) // TODO evtl. auch ohne ""
+			returnUserList = append(returnUserList, user{
+				steamID64:      steamID64,
+				name:           name,
+				public:         false,
+				profileUrl:     profileurl,
+				accountCreated: "",
+				accountAge:     0,
+				FriendsList:    []Friends{},
+				PlaytimeList:   Playtime{},
+			})
 		}
 	}
 	return returnUserList

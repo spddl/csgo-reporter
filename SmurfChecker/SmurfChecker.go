@@ -5,25 +5,24 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-
-	"github.com/xlab/tablewriter"
 )
 
 type printTuple struct {
-	steamID64   string
-	csgoForever int
-	accountAge  int64
+	steamID64      string
+	csgoForever    int
+	accountAge     int64
+	accountCreated string
+	gameCount      int
 }
 
 var APIKEY string
 
-func Start(status []string, APIKEY string) {
-	APIKEY = APIKEY
-	steamID64List := []string{} // Array leeren
-	for _, line := range status {
-		r, e := regexp.Compile("#\\s+\\d+\\s\\d+\\s\"(.+?)\"\\s(.+? )")
-		if e != nil {
-			panic(e)
+func Start(Playerlist []string, APIKEY string) {
+	steamID64List := make([]string, 0, len(Playerlist))
+	for _, line := range Playerlist {
+		r, err := regexp.Compile("#\\s+\\d+\\s\\d+\\s\"(.+?)\"\\s(.+? )")
+		if err != nil {
+			panic(err)
 		}
 
 		matches := r.FindAllStringSubmatch(line, -1)
@@ -37,9 +36,21 @@ func Start(status []string, APIKEY string) {
 	printTupleList := []printTuple{}
 	for _, a := range usersList {
 		if a.public {
-			printTupleList = append(printTupleList, printTuple{a.name, a.PlaytimeList.csgoForever, a.accountAge})
+			printTupleList = append(printTupleList, printTuple{
+				steamID64:      a.name,
+				csgoForever:    a.PlaytimeList.csgoForever,
+				accountAge:     a.accountAge,
+				accountCreated: a.accountCreated,
+				gameCount:      a.PlaytimeList.gameCount,
+			})
 		} else {
-			printTupleList = append(printTupleList, printTuple{"\x1b[31m" + a.name + "\x1b[37m", 0, 0})
+			printTupleList = append(printTupleList, printTuple{
+				steamID64:      "\x1b[31m" + a.name + "\x1b[37m",
+				csgoForever:    0,
+				accountAge:     0,
+				accountCreated: "",
+				gameCount:      0,
+			})
 		}
 	}
 
@@ -47,15 +58,10 @@ func Start(status []string, APIKEY string) {
 		return printTupleList[i].csgoForever < printTupleList[j].csgoForever
 	})
 
-	table := tablewriter.CreateTable()
-
-	table.AddHeaders("NAME", "HRS", "YR")
+	fmt.Printf("\n%11v | %11v | %5v | %8v | %v\n", "Acc created", "Acc Age(YR)", "Games", "CSGO HRS", "NAME")
 	for _, u := range printTupleList {
-		table.AddRow(u.steamID64, strconv.Itoa(u.csgoForever), strconv.Itoa(int(u.accountAge)))
+		fmt.Printf("%11v | %11v | %5v | %8v | %v\n", u.accountCreated, strconv.Itoa(int(u.accountAge)), u.gameCount, strconv.Itoa(u.csgoForever), u.steamID64)
 	}
-	fmt.Println(table.Render())
-
-	fmt.Println(" ")
-
-	go checkFriends(usersList)
+	fmt.Println("")
+	checkFriends(usersList)
 }

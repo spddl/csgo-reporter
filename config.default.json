@@ -1,0 +1,28 @@
+{
+   "path": "C:\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\csgo",
+   "file": "report.cfg",
+   "APIKEY": "#https://steamcommunity.com/dev/apikey#",
+   "reportTemplate": "{{ range $index, $element := .Enemys}}{{if $index}} - {{end}}{{.Name}} {{.HP}} in {{.Hits}} {{if eq .Hits \"1\"}}hit{{else}}hits{{end}}{{end}}",
+   "iintegration": {
+      "enable": true,
+      "c4": true
+   },
+   "sounds": {
+      "c4": [
+         {
+            "time": 41,
+            "mp3": [
+               "start.mp3"
+            ]
+         },
+         {
+            "time": 0,
+            "mp3": [
+               "boooom.mp3"
+            ]
+         }
+      ],
+      "newRound": ""
+   },
+   "help": true
+}
