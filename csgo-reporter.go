@@ -4,15 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
-	"path"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"./SmurfChecker"
 
 	"github.com/tatsushid/go-fastping"
 )
@@ -39,15 +36,14 @@ func main() {
 	}
 
 	// Leeren der console.log
-	err := ioutil.WriteFile(path.Join(config.Path, "console.log"), []byte{10}, 0644)
-	if err != nil {
+	if err := os.WriteFile(pathJoin(config.Path, "console.log"), []byte{10}, 0644); err != nil {
 		log.Println(err)
 	}
 
 	// Leeren der report.cfg
 	WriteFile(config, []byte{})
 
-	t, err := newTailReader(path.Join(config.Path, "console.log"))
+	t, err := newTailReader(pathJoin(config.Path, "console.log"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,7 +52,7 @@ func main() {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		switch true {
+		switch {
 		case strings.Contains(line, "Confirmed best official datacenter ping: "): // errechnete Verzögung von Valve:
 			fmt.Printf("\x1b[36;1m%s\x1b[0m\n", line)
 
@@ -85,9 +81,9 @@ func main() {
 				l := strings.Index(line[16:], `"`)
 				value := line[16 : l+16]
 				if strings.Contains(value, ".") { // der Timer ist in int und in csgo vermutlich ein float
-					value = value[:strings.Index(value, ".")]
+					value = value[:strings.Index(value, ".")+1]
 				}
-				c4time, err := strconv.Atoi(value) // TODO string to int64 ?
+				c4time, err := strconv.Atoi(value)
 				if err != nil {
 					panic(err)
 				}
@@ -103,7 +99,7 @@ func main() {
 
 		case line == "#end":
 			SmurfCheckerStatus = false
-			go SmurfChecker.Start(Playerlist, config.APIKEY)
+			go Start(Playerlist, config.APIKEY)
 
 		default:
 			if SmurfCheckerStatus { // add every player
@@ -113,7 +109,7 @@ func main() {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 }
 
@@ -123,16 +119,16 @@ var echoBySpddl = []byte{101, 99, 104, 111, 32, 98, 121, 115, 112, 100, 100, 108
 var say_team = []byte{115, 97, 121, 95, 116, 101, 97, 109, 32, 34}                // say_team "
 
 func WriteFile(c *Config, val []byte) {
-	var reportPath = path.Join(c.Path, "cfg", c.File)
+	var reportPath = pathJoin(c.Path, "cfg", c.File)
 
 	if bytes.Equal(val, []byte{}) {
-		err := ioutil.WriteFile(reportPath, echoBySpddl, 0644)
+		err := os.WriteFile(reportPath, echoBySpddl, 0644)
 		if err != nil {
 			log.Println(err)
 		}
 		fileIsEmpty = true
 	} else {
-		err := ioutil.WriteFile(reportPath, append(say_team, append(val, []byte{34}...)...), 0644)
+		err := os.WriteFile(reportPath, append(say_team, append(val, []byte{34}...)...), 0644)
 		if err != nil {
 			log.Println(err)
 		}
@@ -143,7 +139,7 @@ func WriteFile(c *Config, val []byte) {
 		}
 		timerempty = time.AfterFunc(2*time.Minute, func() {
 			if !fileIsEmpty {
-				err := ioutil.WriteFile(reportPath, echoBySpddl, 0644)
+				err := os.WriteFile(reportPath, echoBySpddl, 0644)
 				if err != nil {
 					log.Println(err)
 				}

@@ -1,4 +1,4 @@
-package SmurfChecker
+package main
 
 import (
 	"fmt"
@@ -18,14 +18,19 @@ func checkFriends(usersList []user) {
 	// friend has the same steamID64 as the user
 	// Returns a list of tuples that contain (username1, username2, howLongInDaysBeenFriends)
 
-	for _, user := range usersList {
+	for i := 0; i < len(usersList); i++ {
+		user := usersList[i]
+
 		if !user.public { // Profil ist Privat
 			continue
 		}
 
 		currentFriends := []CFriends{}
 		for _, f := range user.FriendsList {
-			for _, StatusPlayerList := range usersList {
+
+			for i := 0; i < len(usersList); i++ {
+				StatusPlayerList := usersList[i]
+
 				if StatusPlayerList.steamID64 == f.Steamid {
 					currentFriends = append(currentFriends, CFriends{
 						userPersonaName:      user.name,

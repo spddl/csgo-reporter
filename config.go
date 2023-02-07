@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+
 	"log"
 	"os"
-	"path"
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
@@ -37,7 +36,7 @@ type Config struct {
 const defaultConfigPath = "./config.json"
 
 func (c *Config) Init() {
-	var defaultPath string = path.Join("C:", "Steam", "steamapps", "common", "Counter-Strike Global Offensive", "csgo")
+	var defaultPath string = pathJoin("C:", "Steam", "steamapps", "common", "Counter-Strike Global Offensive", "csgo")
 	var defaultFile string = "report.cfg"
 
 	flagPath := flag.String("path", defaultPath, "CSGO Folder")
@@ -46,6 +45,7 @@ func (c *Config) Init() {
 
 	if len(os.Args) < 2 { // keine Parameter
 		if _, err := os.Stat(defaultConfigPath); os.IsNotExist(err) { // Keine config.json gefunden
+			log.Println("Keine config.json gefunden")
 			k, err := registry.OpenKey(registry.CURRENT_USER, `SOFTWARE\\Valve\\Steam`, registry.READ)
 			if err != nil {
 				fmt.Println(err)
@@ -55,7 +55,7 @@ func (c *Config) Init() {
 			if err == nil {
 				s = strings.ReplaceAll(s, "/", "\\")
 				fmt.Printf("\x1b[32;1mFound Steam Folder:\x1b[0m%s\n\n", s)
-				defaultPath = path.Join(s, "steamapps", "common", "Counter-Strike Global Offensive", "csgo")
+				defaultPath = pathJoin(s, "steamapps", "common", "Counter-Strike Global Offensive", "csgo")
 			}
 			k.Close()
 
@@ -92,17 +92,6 @@ func (c *Config) Init() {
 	}
 }
 
-func ExistsFolder(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	return true, err
-}
-
 func readCLI(txt string) string {
 	reader := bufio.NewReader(os.Stdin)
 	log.Println(txt)
@@ -115,7 +104,7 @@ func readCLI(txt string) string {
 }
 
 func (c *Config) LoadFile() {
-	file, e := ioutil.ReadFile(defaultConfigPath)
+	file, e := os.ReadFile(defaultConfigPath)
 	if e != nil {
 		log.Printf("File error: %v\n", e)
 		os.Exit(1)

@@ -1,8 +1,9 @@
-package SmurfChecker
+package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -25,12 +26,12 @@ type Playtime struct {
 	csgo2Week   int
 }
 
-func getPlaytimeStats(steamID64, APIKEY string) Playtime {
+func getPlaytimeStats(steamID64, apikey string) Playtime {
 	// For public profiles only, this gets the following statistics and adds them as variables to self
 	// number of games owned, playtime in csgo all time, playtime in csgo past 2 weeks, it also creates
 	// the variable accountAge to self which contains the age of the account in years
 
-	url := "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + APIKEY + "&steamid=" + steamID64
+	url := "https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=" + apikey + "&steamid=" + steamID64
 
 	client := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs
@@ -46,7 +47,7 @@ func getPlaytimeStats(steamID64, APIKEY string) Playtime {
 		log.Fatal(getErr)
 	}
 
-	body, readErr := ioutil.ReadAll(res.Body)
+	body, readErr := io.ReadAll(res.Body)
 	if readErr != nil {
 		log.Fatal(readErr)
 	}
@@ -54,6 +55,8 @@ func getPlaytimeStats(steamID64, APIKEY string) Playtime {
 	GetOwnedGames1 := GetOwnedGames{}
 	jsonErr := json.Unmarshal(body, &GetOwnedGames1)
 	if jsonErr != nil {
+		fmt.Println(url)
+		fmt.Println(string(body))
 		log.Fatal(jsonErr)
 	}
 

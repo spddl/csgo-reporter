@@ -2,9 +2,10 @@
 :loop
 cls
 
-go build .
-@REM IF %ERRORLEVEL% EQU 0 start /B /wait csgo-reporter.exe
-csgo-reporter.exe
+gocritic check -enableAll -disable="#experimental,#opinionated,#commentedOutCode" ./...
+
+::go build .
+go build -v -ldflags="-w -s"
 
 pause
 goto loop

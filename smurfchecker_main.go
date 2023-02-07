@@ -1,4 +1,4 @@
-package SmurfChecker
+package main
 
 import (
 	"fmt"
@@ -17,24 +17,21 @@ type printTuple struct {
 
 var APIKEY string
 
-func Start(Playerlist []string, APIKEY string) {
-	steamID64List := make([]string, 0, len(Playerlist))
-	for _, line := range Playerlist {
-		r, err := regexp.Compile("#\\s+\\d+\\s\\d+\\s\"(.+?)\"\\s(.+? )")
-		if err != nil {
-			panic(err)
-		}
-
+func Start(playerlist []string, apikey string) {
+	steamID64List := make([]string, 0, len(playerlist))
+	for _, line := range playerlist {
+		r := regexp.MustCompile("#\\s+\\d+\\s\\d+\\s\"(.+?)\"\\s(.+? )")
 		matches := r.FindAllStringSubmatch(line, -1)
 		if len(matches) != 0 {
 			steamID64List = append(steamID64List, strconv.Itoa(SteamidTo64bit(matches[0][2])))
 		}
 	}
 
-	usersList := getPlayerSummaries(steamID64List, APIKEY)
+	usersList := getPlayerSummaries(steamID64List, apikey)
 
 	printTupleList := []printTuple{}
-	for _, a := range usersList {
+	for i := 0; i < len(usersList); i++ {
+		a := usersList[i]
 		if a.public {
 			printTupleList = append(printTupleList, printTuple{
 				steamID64:      a.name,

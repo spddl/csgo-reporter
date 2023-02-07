@@ -1,9 +1,9 @@
-package SmurfChecker
+package main
 
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -44,19 +44,19 @@ type user struct {
 	PlaytimeList   Playtime
 }
 
-func getPlayerSummaries(steamID64List []string, APIKEY string) []user {
+func getPlayerSummaries(steamID64List []string, apikey string) []user {
 	// Takes a list of steamID64s and returns a list of User objects containing the following information
 	// username, steamid64, profileurl, isprofileprivate, and if the profile is not private it also adds the
 	// date the account was created in unix timestamp
 
-	if len(APIKEY) == 0 || strings.Contains(APIKEY, "#") {
+	if len(apikey) == 0 || strings.Contains(apikey, "#") {
 		fmt.Println("\x1b[31;1mNO APIKEY\x1b[0m")
 		fmt.Println("go to https://steamcommunity.com/dev/apikey")
 		return []user{}
 	}
 
 	// create comma separated list of steamID64s
-	url := "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + APIKEY + "&steamIDS=" + strings.Join(steamID64List[:], ",")
+	url := "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=" + apikey + "&steamIDS=" + strings.Join(steamID64List, ",")
 
 	client := http.Client{
 		Timeout: time.Second * 2, // Maximum of 2 secs
@@ -74,7 +74,7 @@ func getPlayerSummaries(steamID64List []string, APIKEY string) []user {
 		return []user{}
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Println(err)
 		return []user{}
@@ -88,7 +88,9 @@ func getPlayerSummaries(steamID64List []string, APIKEY string) []user {
 	}
 
 	returnUserList := make([]user, 0, len(steamresp1.Response.Players))
-	for _, e := range steamresp1.Response.Players {
+
+	for i := 0; i < len(steamresp1.Response.Players); i++ {
+		e := steamresp1.Response.Players[i]
 		name := e.Personaname
 		steamID64 := e.Steamid
 		profileurl := e.Profileurl
@@ -102,8 +104,8 @@ func getPlayerSummaries(steamID64List []string, APIKEY string) []user {
 				profileUrl:     profileurl,
 				accountCreated: tm.Format("02.01.2006"),
 				accountAge:     (time.Now().Unix() - int64(e.Timecreated)) / (60 * 60 * 24 * 365 /* One Year */),
-				FriendsList:    getFriends(steamID64, APIKEY),
-				PlaytimeList:   getPlaytimeStats(steamID64, APIKEY),
+				FriendsList:    getFriends(steamID64, apikey),
+				PlaytimeList:   getPlaytimeStats(steamID64, apikey),
 			})
 		} else { // private profile
 			returnUserList = append(returnUserList, user{

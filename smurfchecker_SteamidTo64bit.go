@@ -1,4 +1,4 @@
-package SmurfChecker
+package main
 
 import (
 	"strconv"
